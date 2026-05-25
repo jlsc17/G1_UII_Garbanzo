@@ -1,0 +1,204 @@
+---
+title: "Analisis de Escarificacion de semilla de garbanzo"
+author: "G1"
+format:
+  html:
+    toc: true
+    toc-expand: true
+    toc-depth: 4
+    toc-location: left
+    number-sections: true
+    self-contained: true
+    code-fold: true
+    output-file: "ESM"
+editor_options: 
+  chunk_output_type: console
+execute: 
+  warning: false
+  message: false
+  echo: true
+---
+
+
+# Project Setup
+
+```{r}
+#| label:  setup
+
+source('https://inkaverse.com/setup.r')
+```
+
+
+# Data import
+
+```{r}
+gs <- "https://docs.google.com/spreadsheets/d/1tqNI7-wBtEgbi_9fahcp5hUVrbRrasQ1totp7qwQ82s/edit?gid=889807040#gid=889807040" %>% 
+  as_sheets_id()
+
+fb <- gs %>% 
+  range_read(ss = .,sheet = "fb")
+```
+
+
+# Research Objectives
+## calcular indices de germinacion
+
+```{r}
+# 1. Tu limpieza de datos previa
+fb[fb < 0] <- 0
+dias <- grep("^ger_", colnames(fb), value = TRUE)
+if(length(dias) > 1) {
+  for(i in 2:length(dias)) {
+    fb[[dias[i]]] <- pmax(fb[[dias[i]]], fb[[dias[i-1]]])
+  }
+}
+
+# --- AQUÍ LA SOLUCIÓN: CARGAR LA LIBRERÍA ---
+library(GerminaR)
+
+# 2. Análisis acumulativo (Ahora sí funcionará)
+gsm <- ger_summary(
+  factors = c("escarificacion", "rep"),
+  SeedN = "seeds",
+  evalName = "ger_",
+  cumulative = TRUE,
+  data = as.data.frame(fb)
+)
+```
+
+
+# Análisis puntual de la germinación
+## Porcentaje de la germinacion 
+```{r}
+#1. Análisis de varianza
+av <- aov(grp ~ ntreat * escarificacion, data = gsm)
+
+# 2. Prueba de comparación de medias (SNK)
+mc_grp <- ger_testcomp(aov = av
+                       , comp = c("ntreat", "escarificacion")
+                       , type = "snk"
+                       )
+
+# 3. Mostrar resultado en tabla
+mc_grp$table %>% 
+   kable(caption = "Germination percentage mean comparison")
+```
+
+
+# Gráfico de barras
+```{r}
+grp_plot <- mc_grp$table %>% 
+   fplot(data = .
+        , type = "bar"
+        , x = "escarificacion"         
+        , y = "grp"           
+        , group = "ntreat"     
+        , ylimits = c(0, 120, 20) 
+        , ylab = "Germination ('%')"
+        , xlab = "Escarificacion"
+        , glab = "ntreat"
+        , error = "ste"       
+        , sig = "sig"      
+        , color = TRUE       
+        )
+
+# gráfico 
+grp_plot
+```
+
+
+## Tiempo medio de Germinación
+```{r}
+library(GerminaR)
+gsm <- ger_summary(factors = c("escarificacion", "rep")
+                   , SeedN = "seeds"
+                   , evalName = "ger_"
+                   , cumulative = TRUE
+                   , data = fb
+                   )
+
+print(gsm)
+```
+
+
+## ANOVA
+```{r}
+# Análisis de varianza (ANOVA) 
+
+av <- aov(mgt ~ ntreat * escarificacion + rep, data = gsm)
+
+# Prueba de comparación de medias 
+mc_mgt <- ger_testcomp(aov = av
+                       , comp = c("ntreat", "escarificacion")
+                       , type = "snk"
+                       )
+
+# Mostrar tabla
+mc_mgt$table %>% 
+   kable(caption = "Mean germination time comparison")
+```
+
+
+## Gráfico de barras 
+
+```{r}
+mgt_plot <- mc_mgt$table %>% 
+   fplot(data = .
+        , type = "bar" 
+        , x = "ntreat"               
+        , y = "mgt"                  
+        , group = "escarificacion"   
+        , ylimits = c(0, 12, 1)      
+        , ylab = "Tiempo Medio de Germiancion (días)"
+        , xlab = "ntreat" 
+        , glab = "Escarificacion"     
+        , sig = "sig"                
+        , error = "ste"              
+        , color = TRUE               
+        )
+
+# Mostrar el gráfico en el panel "Plots"
+mgt_plot
+```
+
+
+# Análisis acumulativo de la germinación
+## Analisis en el tiempo
+
+```{r}
+# data frame with percentage or relative germination in time by NaCl
+
+git <- ger_intime(Factor = "escarificacion"
+                  , SeedN = "seeds"
+                  , evalName = "ger_"
+                  , method = "percentage"
+                  , data = as.data.frame(fb)
+                  )
+
+# data result
+
+git %>% 
+   head(10) %>% 
+   kable(caption = "Cumulative germination by nacl factor")
+```
+
+
+```{r}
+# graphic germination in time by NaCl
+
+nacl <- git %>% 
+   fplot(data = .
+        , type = "line"
+        , x = "evaluation"
+        , y = "mean"
+        , group = "escarificacion"
+        , ylimits = c(0, 110, 10)
+        , ylab = "Germination ('%')"
+        , xlab = "Day"
+        , glab = "ntreat"
+        , color = T
+        , error = "ste"
+        )
+nacl
+```
+
